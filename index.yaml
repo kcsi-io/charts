@@ -1,5 +1,32 @@
 apiVersion: v1
 entries:
+  fudosan:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2022-05-03T18:09:11.321028034Z"
+    dependencies:
+    - alias: app1-postgresql
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: 11.1.26
+    - alias: app1
+      name: postgrest
+      repository: https://thecampagnards.github.io/helm-charts
+      version: 0.1.6
+    - name: vault
+      repository: https://helm.releases.hashicorp.com
+      version: 0.19.0
+    - alias: app1-ui
+      name: nginx
+      repository: https://charts.bitnami.com/bitnami
+      version: 10.2.1
+    description: A Helm chart for Kubernetes to deploy fudosan
+    digest: 5db7372f4dd4aa4ad21f4bb2840bfc8c02c8fd47ab7d5b5ab820839e59cc055f
+    name: fudosan
+    type: application
+    urls:
+    - https://github.com/kcsi-io/charts/releases/download/fudosan-0.1.1/fudosan-0.1.1.tgz
+    version: 0.1.1
   izimmo:
   - apiVersion: v2
     appVersion: 0.1.0
@@ -27,4 +54,4 @@ entries:
     urls:
     - https://github.com/izimmo/charts/releases/download/izimmo-0.1.0/izimmo-0.1.0.tgz
     version: 0.1.0
-generated: "2022-04-14T21:31:59.272038843Z"
+generated: "2022-05-03T18:09:11.321042535Z"
