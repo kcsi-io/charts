@@ -1,0 +1,114 @@
+# https://github.com/bitnami/charts/tree/master/bitnami/postgresql
+app1-postgresql:
+  global:
+    postgresql:
+      auth:
+        postgresPassword: postgres
+        database: postgres
+  primary:
+    containerSecurityContext:
+      runAsUser: 0
+    initdb:
+      scripts:
+        # https://github.com/xocolatl/periods
+        1_install_periods.sh: |
+          #!/bin/sh
+          apt update
+          apt install -y --no-install-recommends curl ca-certificates gnupg
+          curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/apt.postgresql.org.gpg >/dev/null
+          echo 'deb http://apt.postgresql.org/pub/repos/apt buster-pgdg main' > /etc/apt/sources.list.d/pgdg.list
+          apt update
+          apt install -y --no-install-recommends postgresql-14-periods
+          rm -rf /var/lib/apt/lists/*
+          cp /usr/share/postgresql/14/extension/periods* /opt/bitnami/postgresql/share/extension/
+          cp /usr/lib/postgresql/14/lib/periods.so /opt/bitnami/postgresql/lib/periods.so
+        2_install_enable_periods.sql: |
+          CREATE EXTENSION IF NOT EXISTS periods CASCADE;
+        3_init_db.sql: |
+          CREATE TABLE example (
+              id bigint PRIMARY KEY,
+              value text
+          );
+          SELECT periods.add_system_time_period('example');
+          SELECT periods.add_system_versioning('example');
+  metrics:
+    enabled: true
+    # serviceMonitor.enabled: true
+# https://github.com/thecampagnards/helm-charts/tree/main/charts/postgrest
+app1:
+  serviceAccount:
+    create: true
+  podAnnotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "fudosan-app1"
+    vault.hashicorp.com/agent-inject-secret-postgrest.db-uri: 'database/creds/fudosan-app1-postgresql'
+    vault.hashicorp.com/agent-inject-template-postgrest.db-uri: |
+      {{- with secret "database/creds/fudosan-app1-postgresql" -}}
+      postgresql://{{ .Data.username }}:{{ .Data.password }}@fudosan-app1-postgresql:5432/postgres?sslmode=disable
+      {{- end -}}
+  # initContainers:
+  #   - name: init-app1-postgresql
+  #     image: busybox:1.35
+  #     command: ['sh', '-c', "until nslookup fudosan-vault; do echo waiting fudosan-vault...; sleep 2; done"]
+  postgresql:
+    enabled: false
+  postgrest:
+    db_uri: "@/vault/secrets/postgrest.db-uri"
+    db_anon_role: ""
+# https://github.com/bitnami/charts/tree/master/bitnami/nginx
+app1-ui:
+  service:
+    type: ClusterIP
+  image:
+    registry: ghcr.io
+    repository: fudosan/react-rtk-jsonschema
+    tag: main
+    pullSecrets: ["ghcr.io"]
+    # pullPolicy: Always
+  metrics:
+    enabled: false # need to fix scrap path
+    # serviceMonitor.enabled: true
+# https://github.com/hashicorp/vault-helm/blob/main/values.yaml
+vault:
+  server:
+    dev:
+      enabled: true
+    extraInitContainers:
+    - name: init-app1-postgresql
+      image: busybox:1.35
+      command: ['sh', '-c', "until nslookup fudosan-app1-postgresql; do echo waiting fudosan-app1-postgresql...; sleep 2; done"]
+    postStart:
+    - /bin/sh
+    - -c
+    - |
+      vault auth enable kubernetes;
+      vault write auth/kubernetes/config \
+        kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443" \
+        token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+        kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt;
+      vault secrets enable database;
+      vault write database/roles/fudosan-app1-postgresql \
+          db_name=fudosan-app1-postgresql \
+          creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
+              GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";" \
+          revocation_statements="ALTER ROLE \"{{name}}\" NOLOGIN;"\
+          default_ttl="1h" \
+          max_ttl="24h";
+      vault write database/config/fudosan-app1-postgresql \
+        plugin_name=postgresql-database-plugin \
+        allowed_roles="fudosan-app1-postgresql" \
+        connection_url="postgresql://{{username}}:{{password}}@fudosan-app1-postgresql:5432/postgres?sslmode=disable" \
+        username="postgres" \
+        password="postgres";
+      vault write --force /database/rotate-root/fudosan-app1-postgresql
+      vault policy write fudosan-app1 - <<EOF
+        path "database/creds/fudosan-app1-postgresql" {
+          capabilities = ["read"]
+        }
+      EOF
+      ;
+      vault write auth/kubernetes/role/fudosan-app1 \
+        bound_service_account_names=fudosan-app1 \
+        bound_service_account_namespaces=default \
+        policies=fudosan-app1 \
+        ttl=24h;

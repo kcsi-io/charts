@@ -49,6 +49,8 @@ jobs:
       - name: Add dependency chart repos
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add thecampagnards https://thecampagnards.github.io/helm-charts
+          helm repo add hashicorp https://helm.releases.hashicorp.com
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.4.0

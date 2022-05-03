@@ -5,4 +5,6 @@ chart-dirs:
   - charts
 chart-repos:
   - bitnami=https://charts.bitnami.com/bitnami
+  - thecampagnards=https://thecampagnards.github.io/helm-charts
+  - hashicorp=https://helm.releases.hashicorp.com
 helm-extra-args: --timeout 600s
